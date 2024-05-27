@@ -1,0 +1,116 @@
+name: 'Close PR from Issue'
+author: 'Kaijie Yu'
+description: 'Close the PR when the related issue is closed.'
+
+branding:
+  icon: 'check-circle'
+  color: 'red'
+
+inputs:
+  issue_comment_key:
+    description: |-
+      The key string of relevant comments that mention the PR.
+      Default: 'tracked at PR #'
+    required: false
+    default: 'tracked at PR #'
+  delete_branch:
+    description: |-
+      Whether to delete the branch after closing, default: 'true'.
+    required: false
+    default: 'true'
+  leave_comment_on_issue:
+    description: |-
+      Whether to comment on the issue after the relevant PR is closed, default: 'true'.
+    required: false
+    default: 'true'
+  skip_checkout:
+    description: |-
+      Whether caller workflow repo checkout should be skipped, default: 'false'.
+      If you've done this in the caller workflow, set this to 'true' to skip duplicate work.
+    required: false
+    default: 'false'
+  token:
+    description: "Github token or PAT, default: github.token."
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Close PR for Issue ${{ github.event.issue.number }}
+      shell: bash
+      run: |
+        echo "### Close PR for Issue ${{ github.event.issue.number }}." >> $GITHUB_STEP_SUMMARY
+        echo "REUSABLE_ACTION_PATH=close-pr-from-issue" >> $GITHUB_ENV
+
+    - name: Checkout the caller workflow repo (for gh cmd to close PR).
+      if: inputs.skip_checkout == 'false'
+      uses: actions/checkout@v4
+
+    - name: Checkout this reusable action repo (for *.sh scripts).
+      id: checkout-action-repo
+      uses: actions/checkout@v4
+      with:
+        repository: kjuly/close-pr-from-issue
+        ref: main
+        path: ${{ env.REUSABLE_ACTION_PATH }}
+        token: ${{ inputs.token }}
+
+    - name: Find PR Comment
+      id: find-pr-comment
+      uses: peter-evans/find-comment@v3
+      with:
+        issue-number: ${{ github.event.issue.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: ${{ inputs.issue_comment_key }}
+        direction: last
+
+    - name: Find PR Comment - Outputs
+      env:
+        COMMENT_BODY: ${{ steps.find-pr-comment.outputs.comment-body }}
+      shell: bash
+      run: |
+        echo ${{ steps.find-pr-comment.outputs.comment-id }}
+        echo ${{ steps.find-pr-comment.outputs.comment-author }}
+        echo ${{ steps.find-pr-comment.outputs.comment-created-at }}
+
+    - name: Get PR ID from Comment
+      if: steps.find-pr-comment.outputs.comment-id != 0
+      id: get-pr-number
+      env:
+        COMMENT_BODY: ${{ steps.find-pr-comment.outputs.comment-body }}
+      shell: bash
+      run: ./$REUSABLE_ACTION_PATH/scripts/get_pr_number_from_issue_comment.sh "$COMMENT_BODY"
+
+    - name: Close PR
+      if: steps.get-pr-number.outputs.pr_number != 0
+      id: close-pr
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ steps.get-pr-number.outputs.pr_number }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        DELETE_BRANCH: ${{ inputs.delete_branch }}
+      shell: bash
+      run: ./$REUSABLE_ACTION_PATH/scripts/close_pr_only_if_open.sh "$PR_NUMBER" "$ISSUE_NUMBER" "$DELETE_BRANCH"
+
+    - name: Add Comment on Issue
+      if: steps.close-pr.outputs.closed == 1 && inputs.leave_comment_on_issue == 'true'
+      uses: actions/github-script@v7
+      env:
+        PR_NUMBER: ${{ steps.get-pr-number.outputs.pr_number }}
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const output = `
+          Closed PR #${ process.env.PR_NUMBER }.
+          `;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Clean up
+      shell: bash
+      run: rm -rf "$REUSABLE_ACTION_PATH"
