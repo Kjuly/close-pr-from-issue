@@ -69,7 +69,7 @@ runs:
       env:
         COMMENT_BODY: ${{ steps.find-pr-comment.outputs.comment-body }}
       shell: bash
-      run: $GITHUB_ACTION_PATH/get_pr_number_from_issue_comment.sh "$COMMENT_BODY"
+      run: $GITHUB_ACTION_PATH/scripts/get_pr_number_from_issue_comment.sh "$COMMENT_BODY"
 
     - name: Close PR
       if: steps.get-pr-number.outputs.pr_number != 0
@@ -80,7 +80,7 @@ runs:
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         DELETE_BRANCH: ${{ inputs.delete_branch }}
       shell: bash
-      run: $GITHUB_ACTION_PATH/close_pr_only_if_open.sh "$PR_NUMBER" "$ISSUE_NUMBER" "$DELETE_BRANCH"
+      run: $GITHUB_ACTION_PATH/scripts/close_pr_only_if_open.sh "$PR_NUMBER" "$ISSUE_NUMBER" "$DELETE_BRANCH"
 
     - name: Add Comment on Issue
       if: steps.close-pr.outputs.closed == 1 && inputs.leave_comment_on_issue == 'true'
