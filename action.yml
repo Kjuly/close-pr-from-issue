@@ -39,22 +39,11 @@ runs:
   steps:
     - name: Close PR for Issue ${{ github.event.issue.number }}
       shell: bash
-      run: |
-        echo "### Close PR for Issue ${{ github.event.issue.number }}." >> $GITHUB_STEP_SUMMARY
-        echo "REUSABLE_ACTION_PATH=close-pr-from-issue" >> $GITHUB_ENV
+      run: echo "### Close PR for Issue ${{ github.event.issue.number }}." >> $GITHUB_STEP_SUMMARY
 
     - name: Checkout the caller workflow repo (for gh cmd to close PR).
       if: inputs.skip_checkout == 'false'
       uses: actions/checkout@v4
-
-    - name: Checkout this reusable action repo (for *.sh scripts).
-      id: checkout-action-repo
-      uses: actions/checkout@v4
-      with:
-        repository: kjuly/close-pr-from-issue
-        ref: main
-        path: ${{ env.REUSABLE_ACTION_PATH }}
-        token: ${{ inputs.token }}
 
     - name: Find PR Comment
       id: find-pr-comment
@@ -80,7 +69,7 @@ runs:
       env:
         COMMENT_BODY: ${{ steps.find-pr-comment.outputs.comment-body }}
       shell: bash
-      run: ./$REUSABLE_ACTION_PATH/scripts/get_pr_number_from_issue_comment.sh "$COMMENT_BODY"
+      run: $GITHUB_ACTION_PATH/get_pr_number_from_issue_comment.sh "$COMMENT_BODY"
 
     - name: Close PR
       if: steps.get-pr-number.outputs.pr_number != 0
@@ -91,7 +80,7 @@ runs:
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         DELETE_BRANCH: ${{ inputs.delete_branch }}
       shell: bash
-      run: ./$REUSABLE_ACTION_PATH/scripts/close_pr_only_if_open.sh "$PR_NUMBER" "$ISSUE_NUMBER" "$DELETE_BRANCH"
+      run: $GITHUB_ACTION_PATH/close_pr_only_if_open.sh "$PR_NUMBER" "$ISSUE_NUMBER" "$DELETE_BRANCH"
 
     - name: Add Comment on Issue
       if: steps.close-pr.outputs.closed == 1 && inputs.leave_comment_on_issue == 'true'
@@ -110,7 +99,3 @@ runs:
             repo: context.repo.repo,
             body: output
           })
-
-    - name: Clean up
-      shell: bash
-      run: rm -rf "$REUSABLE_ACTION_PATH"
